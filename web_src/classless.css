@@ -28,6 +28,17 @@ Table of Contents:
 	--cemph: #088;    --cemphbg: #0881;
 }
 
+@media (prefers-color-scheme: dark) {
+	html[data-theme='light'] {
+		/* foreground   | background color */
+		--cfg:   #cecbc4; --cbg:    #252220;
+		--cdark: #999;    --clight: #333;
+		--cmed:  #566;
+		--clink: #1ad;
+		--cemph: #0b9;    --cemphbg: #0b91;
+	}
+}
+
 
 /* 2. Reset –––––––––––––––––––––––––––––––––––––––––––– */
 

@@ -64,6 +64,10 @@
     </tr>
 </template>
 <script>
+    // will be overwritten by prefers-color-scheme
+    document.documentElement.setAttribute('data-theme', 'light')
+    let users = {};
+
     function readableDuration(seconds) {
         let interval = Math.floor(seconds / 31536000);
 
@@ -141,12 +145,12 @@
             // In case the user edits the username, cancels all recurring requests
             return
         }
-        if (localStorage.getItem(username) !== "done") {
+        if (users[username] !== "done") {
             fetch('/api/get_status?username=' + encodeURIComponent(username)).then((result) => {
                 if (result.ok) {
                     result.json().then((body) => {
                         if (body.stage === 3) {
-                            localStorage.setItem(username, "done");
+                            users[username] = 'done';
                             getRecommendations(username);
                         } else {
                             hideAll();
@@ -177,10 +181,10 @@
 
     function getUser() {
         let username = document.getElementById("username").value;
-        if (!localStorage.getItem(username)) {
+        if (!users[username]) {
             fetch('/api/get_user?username=' + encodeURIComponent(username)).then((result) => {
                 if (result.ok) {
-                    localStorage.setItem(username, "true");
+                    users[username] = 'true';
                     getStatus(username)
                 } else {
                     result.text().then((body) => {

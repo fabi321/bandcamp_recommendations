@@ -51,6 +51,8 @@
             <tr>
                 <th scope="col">Album</th>
                 <th scope="col">Band</th>
+                <th scope="col">Collected By</th>
+                <th scope="col">Score</th>
             </tr>
         </thead>
         <tbody id="result_body">
@@ -61,12 +63,15 @@
     <tr>
         <td><a id="result_album" href="#"></a></td>
         <td id="result_band"></td>
+        <td id="result_collected"></td>
+        <td id="result_score"></td>
     </tr>
 </template>
 <script>
     // will be overwritten by prefers-color-scheme
     document.documentElement.setAttribute('data-theme', 'light')
     let users = {};
+    let page = 0;
 
     function readableDuration(seconds) {
         let interval = Math.floor(seconds / 31536000);
@@ -125,6 +130,8 @@
                         album.textContent = value.item_title;
                         album.setAttribute("href", value.item_url);
                         clone.getElementById("result_band").innerText = value.band_name;
+                        clone.getElementById("result_collected").innerText = value.also_collected_count;
+                        clone.getElementById("result_score").innerText = Math.floor(value.score);
                         new_nodes.push(clone)
                     }
                     table_body.replaceChildren(...new_nodes);

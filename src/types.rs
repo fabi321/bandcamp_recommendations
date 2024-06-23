@@ -53,6 +53,7 @@ pub struct Item {
     pub band_name: String,
     pub token: Option<String>,
     pub also_collected_count: i64,
+    pub score: Option<f64>,
 }
 
 pub fn item_from_row(row: &Row) -> rusqlite::Result<Item> {
@@ -61,12 +62,13 @@ pub fn item_from_row(row: &Row) -> rusqlite::Result<Item> {
         item_type: row.get("item_type")?,
         item_title: row.get("item_title")?,
         item_url: row.get("item_url")?,
-        album_id: None,
-        album_title: None,
+        album_id: row.get("item_id")?,
+        album_title: row.get("item_title")?,
         band_id: row.get("band_id")?,
         band_name: row.get("band_name")?,
         token: row.get("token")?,
         also_collected_count: row.get("also_collected_count")?,
+        score: None,
     })
 }
 

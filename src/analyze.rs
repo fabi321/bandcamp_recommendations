@@ -68,8 +68,10 @@ pub fn get_user_recommendations(
     let mut elements = count.into_iter().collect::<Vec<_>>();
     elements.sort_unstable_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap_or(Ordering::Equal));
     let mut result = Vec::new();
-    for (item_id, _) in elements.into_iter().take(50) {
-        result.push(get_item(&conn, item_id)?)
+    for (item_id, score) in elements.into_iter().take(50) {
+        let mut item = get_item(&conn, item_id)?;
+        item.score = Some(score);
+        result.push(item)
     }
     Ok(result)
 }

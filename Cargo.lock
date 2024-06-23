@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "bandcamp_recommendations"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "actix-web",
  "chrono",

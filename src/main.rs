@@ -1,4 +1,5 @@
 use actix_web::{get, web, App, HttpResponse, HttpServer};
+use actix_web::http::header::ContentType;
 use clap::Parser;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -93,18 +94,24 @@ async fn get_recommendations(
 }
 
 #[get("/classless.css")]
-async fn get_classless() -> &'static str {
-    include_str!("../web_src/classless.css")
+async fn get_classless() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type(ContentType(mime::TEXT_CSS))
+        .body(include_str!("../web_src/classless.css"))
 }
 
 #[get("/index.html")]
-async fn get_index() -> &'static str {
-    include_str!("../web_src/index.html")
+async fn get_index() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type(ContentType::html())
+        .body(include_str!("../web_src/index.html"))
 }
 
 #[get("/")]
-async fn get_root() -> &'static str {
-    include_str!("../web_src/index.html")
+async fn get_root() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type(ContentType::html())
+        .body(include_str!("../web_src/index.html"))
 }
 
 #[actix_web::main]

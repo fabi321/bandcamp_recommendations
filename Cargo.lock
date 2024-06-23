@@ -338,12 +338,13 @@ dependencies = [
 
 [[package]]
 name = "bandcamp_recommendations"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "actix-web",
  "chrono",
  "clap",
  "fallible-iterator",
+ "mime",
  "r2d2",
  "r2d2_sqlite",
  "reqwest",

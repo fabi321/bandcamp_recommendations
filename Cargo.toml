@@ -16,7 +16,6 @@ tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
 snafu = "0.8"
 actix-web = "4"
-actix-files = "0.6"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 fallible-iterator = "0.3"
 clap = { version = "4", features = ["derive"] }

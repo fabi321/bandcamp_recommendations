@@ -1,4 +1,3 @@
-use actix_files::Files;
 use actix_web::{get, web, App, HttpResponse, HttpServer};
 use clap::Parser;
 use r2d2::Pool;
@@ -93,6 +92,21 @@ async fn get_recommendations(
     }
 }
 
+#[get("/classless.css")]
+async fn get_classless() -> &'static str {
+    include_str!("../web_src/classless.css")
+}
+
+#[get("/index.html")]
+async fn get_index() -> &'static str {
+    include_str!("../web_src/index.html")
+}
+
+#[get("/")]
+async fn get_root() -> &'static str {
+    include_str!("../web_src/index.html")
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args = args::Args::parse();
@@ -132,7 +146,9 @@ async fn main() -> std::io::Result<()> {
             .service(get_status)
             .service(get_user)
             .service(get_recommendations)
-            .service(Files::new("/", "./web_src").index_file("index.html"))
+            .service(get_classless)
+            .service(get_index)
+            .service(get_root)
     })
     .bind(("::0", 8080))?
     .run();

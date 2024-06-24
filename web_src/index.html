@@ -105,7 +105,6 @@
     }
 
     function linToLog(position) {
-        // The result should be between 100 an 10000000
         let minv = Math.log(1);
         let maxv = Math.log(5);
 
@@ -161,7 +160,7 @@
                             getRecommendations(username);
                         } else {
                             hideAll();
-                            const item = body.stage === 2 ? 'item' : 'collector';
+                            const item = body.stage === 1 ? 'item' : 'collector';
                             const bar = document.getElementById("progress_bar");
                             bar.setAttribute("max", body.count_total);
                             bar.setAttribute("value", body.count_total - body.count_left);

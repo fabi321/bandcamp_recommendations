@@ -312,6 +312,17 @@ fn remove_from_queue(db: &Connection, collector: &str) -> Result<(), Error> {
     Ok(())
 }
 
+const DELETE_COLLECTS: &str = r#"
+delete from collects where fan_id = (
+select fan_id from collector where username = ?
+)"#;
+
+fn remove_collects(db: &Connection, name: &str) -> Result<(), Error> {
+    let mut stmt = db.prepare_cached(DELETE_COLLECTS).context(DbPrepareSnafu)?;
+    stmt.execute([name]).context(DbWriteSnafu)?;
+    Ok(())
+}
+
 pub async fn collection_worker(
     db: &Pool<SqliteConnectionManager>,
     crawl: bool,
@@ -325,7 +336,8 @@ pub async fn collection_worker(
             match fetch_collection(db, &collector, false).await {
                 Err(Error::RateLimit) => {
                     println!("Rate limited, waiting 10 seconds");
-                    // Need to re-add collector as it was removed from the queue by get_next_collector
+                    let conn = db.get().context(DbPoolSnafu)?;
+                    remove_collects(&conn, &collector)?;
                     sleep(Duration::from_secs(10)).await
                 }
                 Err(Error::NotFoundError) => {

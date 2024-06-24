@@ -1,6 +1,6 @@
 use crate::items::get_item;
 use crate::types::Item;
-use crate::{DbPrepareSnafu, DbReadSnafu, Error, NotFoundSnafu};
+use crate::{DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, Error, NotFoundSnafu};
 use fallible_iterator::FallibleIterator;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -50,9 +50,9 @@ pub fn get_user_recommendations(
     username: &str,
     similar_boost: f64,
 ) -> Result<Vec<Item>, Error> {
-    let conn = db.get().unwrap();
-    let fan_id =
-        crate::collectors::get_fan_id_for_username(&conn, username)?.context(NotFoundSnafu)?;
+    let conn = db.get().context(DbPoolSnafu)?;
+    let fan_id = crate::collectors::get_fan_id_for_username(&conn, username)?
+        .context(NotFoundSnafu)?;
     let users = get_relevant_users(&conn, username)?;
     let forbidden = users[&fan_id].clone();
     let mut count: HashMap<i64, f64> = HashMap::new();

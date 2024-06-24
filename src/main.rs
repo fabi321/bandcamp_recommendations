@@ -126,14 +126,14 @@ async fn main() -> std::io::Result<()> {
     let db_copy = pool.clone();
     let collection_worker = spawn(async move {
         loop {
-            let res = collectors::collection_worker(&db_copy).await.unwrap_err();
+            let res = collectors::collection_worker(&db_copy, args.crawl).await.unwrap_err();
             println!("Error in collection_worker: {res}");
         }
     });
     let db_copy = pool.clone();
     let item_worker = spawn(async move {
         loop {
-            let res = items::item_worker(&db_copy).await.unwrap_err();
+            let res = items::item_worker(&db_copy, args.crawl).await.unwrap_err();
             println!("Error in item_worker: {res}");
         }
     });
@@ -157,8 +157,8 @@ async fn main() -> std::io::Result<()> {
             .service(get_index)
             .service(get_root)
     })
-    .bind(("::0", 8080))?
-    .run();
+        .bind(args.address)?
+        .run();
     let res = join!(collection_worker, item_worker, progress_manager, server);
     res.0.unwrap();
     res.1.unwrap();
@@ -189,6 +189,9 @@ pub enum Error {
 
     #[snafu(display("Database write error: {:?}", source))]
     DbWriteError { source: rusqlite::Error },
+    
+    #[snafu(display("Error opening database: {:?}", source))]
+    DbPoolError { source: r2d2::Error },
 
     #[snafu(display("No row returned from database"))]
     DbResultError,

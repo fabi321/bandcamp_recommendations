@@ -1,7 +1,5 @@
 use crate::types::{Collector, Item};
-use crate::{
-    DbPrepareSnafu, DbReadSnafu, DbWriteSnafu, Error, NetworkSnafu, PageSnafu, SerializationSnafu,
-};
+use crate::{DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, DbWriteSnafu, Error, NetworkSnafu, PageSnafu, SerializationSnafu};
 use fallible_iterator::FallibleIterator;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -146,7 +144,7 @@ async fn get_initial_page(
         let attrs = node.attrs();
         let body = attrs.get("data-blob").context(PageSnafu)?;
         let result: InitialResult = serde_json::from_str(body).context(SerializationSnafu)?;
-        let conn = db.get().unwrap();
+        let conn = db.get().context(DbPoolSnafu)?;
         add_collector(&conn, &result.fan_data)?;
         let mut done = false;
         for entry in result.item_cache.collection.into_values() {
@@ -191,7 +189,7 @@ async fn get_next_page(
         let collection_result: CollectionResult =
             serde_json::from_str(&body).context(SerializationSnafu)?;
         let mut done = false;
-        let conn = db.get().unwrap();
+        let conn = db.get().context(DbPoolSnafu)?;
         for entry in collection_result.items {
             done = add_item_for_collector(&conn, fan_id, &entry)?;
             last_token = entry.token.unwrap();
@@ -211,9 +209,11 @@ pub async fn fetch_collection(
     name: &str,
     force: bool,
 ) -> Result<(), Error> {
-    if !force && collector_present_and_recent(&db.get().unwrap(), name)? {
+    let conn = db.get().context(DbPoolSnafu)?;
+    if !force && collector_present_and_recent(&conn, name)? {
         return Ok(());
     }
+    drop(conn);
     let result = get_initial_page(db, name).await?;
     if result.more_available {
         let mut last_token = result.last_token;
@@ -232,7 +232,7 @@ join collects using (fan_id)
 where username = ?"#;
 
 pub fn get_collection_size(db: &Pool<SqliteConnectionManager>, name: &str) -> Result<u64, Error> {
-    let conn = db.get().unwrap();
+    let conn = db.get().context(DbPoolSnafu)?;
     let mut stmt = conn
         .prepare_cached(SELECT_COLLECTION_SIZE)
         .context(DbPrepareSnafu)?;
@@ -246,26 +246,34 @@ pub fn get_collection_size(db: &Pool<SqliteConnectionManager>, name: &str) -> Re
 }
 
 const SELECT_FIRST_QUEUE_COLLECTOR: &str = r#"
-select fan_id, username from collector_collection_queue
-join collector using (fan_id) limit 1"#;
+select username from collector_collection_queue
+join collector using (fan_id)
+order by fan_id asc
+limit 1"#;
 
-const DELETE_QUEUE_COLLECTOR: &str = r#"
-delete from collector_collection_queue where fan_id = ?"#;
+const SELECT_UNFINISHED: &str = r#"
+select username from collector
+where unixepoch('now') > unixepoch(last_updated, '30 days')
+order by fan_id asc
+limit 1"#;
 
-fn get_next_collector(db: &Connection) -> Result<Option<String>, Error> {
-    let mut stmt = db
-        .prepare_cached(SELECT_FIRST_QUEUE_COLLECTOR)
-        .context(DbPrepareSnafu)?;
+fn get_next_collector(db: &Connection, crawl: bool) -> Result<Option<String>, Error> {
+    let mut stmt = db.prepare_cached(SELECT_FIRST_QUEUE_COLLECTOR).context(DbPrepareSnafu)?;
     let mut rows = stmt.query([]).context(DbReadSnafu)?;
     let row = rows.next().context(DbReadSnafu)?;
     if let Some(row) = row {
-        let fan_id: i64 = row.get("fan_id").context(DbReadSnafu)?;
         let username: String = row.get("username").context(DbReadSnafu)?;
-        let mut stmt = db
-            .prepare_cached(DELETE_QUEUE_COLLECTOR)
-            .context(DbPrepareSnafu)?;
-        stmt.execute([fan_id]).context(DbWriteSnafu)?;
         Ok(Some(username))
+    } else if crawl {
+        let mut stmt = db.prepare_cached(SELECT_UNFINISHED).context(DbPrepareSnafu)?;
+        let mut rows = stmt.query([]).context(DbReadSnafu)?;
+        let row = rows.next().context(DbReadSnafu)?;
+        if let Some(row) = row {
+            let username: String = row.get("username").context(DbReadSnafu)?;
+            Ok(Some(username))
+        } else {
+            Ok(None)
+        }
     } else {
         Ok(None)
     }
@@ -284,40 +292,43 @@ fn mark_collector_done(db: &Connection, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-const ADD_COLLECTOR_TO_QUEUE: &str = r#"
-insert into collector_collection_queue
-values ((select fan_id from collector where username = ?))"#;
+const DELETE_QUEUE_COLLECTOR: &str = r#"
+delete from collector_collection_queue where fan_id = (
+select fan_id from collector where username = ?
+)"#;
 
-fn add_collector_to_queue(db: &Connection, collector: &str) -> Result<(), Error> {
-    let mut stmt = db
-        .prepare_cached(ADD_COLLECTOR_TO_QUEUE)
-        .context(DbPrepareSnafu)?;
+fn remove_from_queue(db: &Connection, collector: &str) -> Result<(), Error> {
+    let mut stmt = db.prepare_cached(DELETE_QUEUE_COLLECTOR).context(DbPrepareSnafu)?;
     stmt.execute([collector]).context(DbWriteSnafu)?;
     Ok(())
 }
 
-pub async fn collection_worker(db: &Pool<SqliteConnectionManager>) -> Result<(), Error> {
+pub async fn collection_worker(db: &Pool<SqliteConnectionManager>, crawl: bool) -> Result<(), Error> {
     let mut timer = interval(Duration::from_secs(1));
     timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
-        if let Some(collector) = get_next_collector(&db.get().unwrap())? {
+        let conn = db.get().context(DbPoolSnafu)?;
+        if let Some(collector) = get_next_collector(&conn, crawl)? {
+            drop(conn);
             match fetch_collection(db, &collector, false).await {
                 Err(Error::RateLimit) => {
                     println!("Rate limited, waiting 10 seconds");
                     // Need to re-add collector as it was removed from the queue by get_next_collector
-                    add_collector_to_queue(&db.get().unwrap(), &collector)?;
                     sleep(Duration::from_secs(10)).await
                 }
                 Err(Error::NotFoundError) => {
                     println!("Collector {collector} not found");
-                    mark_collector_done(&db.get().unwrap(), &collector)?;
+                    let conn = db.get().context(DbPoolSnafu)?;
+                    mark_collector_done(&conn, &collector)?;
+                    remove_from_queue(&conn, &collector)?;
                 }
                 Err(err) => {
-                    add_collector_to_queue(&db.get().unwrap(), &collector)?;
                     println!("Error while processing collector {collector}: {err}");
                 }
                 Ok(()) => {
-                    mark_collector_done(&db.get().unwrap(), &collector)?;
+                    let conn = db.get().context(DbPoolSnafu)?;
+                    mark_collector_done(&conn, &collector)?;
+                    remove_from_queue(&conn, &collector)?;
                 }
             }
         }

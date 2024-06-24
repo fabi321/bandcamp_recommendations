@@ -1,5 +1,5 @@
 use crate::types::{target_from_row, Target};
-use crate::{DbPrepareSnafu, DbReadSnafu, DbWriteSnafu, Error};
+use crate::{DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, DbWriteSnafu, Error};
 use fallible_iterator::FallibleIterator;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -204,7 +204,7 @@ pub async fn progress_manager(db: &Pool<SqliteConnectionManager>) -> Result<(), 
     let mut timer = interval(Duration::from_secs(1));
     timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
-        let conn = db.get().unwrap();
+        let conn = db.get().context(DbPoolSnafu)?;
         for target in get_targets(&conn)? {
             update_target(&conn, target)?
         }

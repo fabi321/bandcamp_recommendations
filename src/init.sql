@@ -10,6 +10,8 @@ create table if not exists item (
     last_updated integer not null
 ) strict;
 
+create index if not exists item_last_updated on item(last_updated);
+
 create table if not exists collector (
     fan_id integer not null primary key,
     username text not null unique,
@@ -19,6 +21,7 @@ create table if not exists collector (
 ) strict;
 
 create unique index if not exists collector_username on collector(username);
+create index if not exists collector_last_updated on collector(last_updated);
 
 create table if not exists collected_by (
     item_id integer not null references item on delete cascade,

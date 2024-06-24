@@ -1,9 +1,7 @@
+use std::str::FromStr;
 use crate::collectors::add_collector;
 use crate::types::{Collector, Item};
-use crate::{
-    DbPrepareSnafu, DbReadSnafu, DbResultSnafu, DbWriteSnafu, Error, NetworkSnafu, PageSnafu,
-    SerializationSnafu,
-};
+use crate::{DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, DbResultSnafu, DbWriteSnafu, Error, NetworkSnafu, PageSnafu, SerializationSnafu};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use reqwest::{Client, StatusCode};
@@ -119,14 +117,24 @@ async fn get_initial_page(
         let soup = Soup::new(&body);
         let node = soup
             .attr("id", "collectors-data")
-            .find()
-            .context(PageSnafu)?;
+            .find();
+        let Some(node) = node else {
+            return Err(if soup.attr("id", "subscription-collectors-data").find().is_some() {
+                // I have no clue how to properly scrape subscriptions, so just ignore them
+                Error::NotFoundError
+            } else {
+                Error::PageError
+            });
+        };
         let attrs = node.attrs();
         let body = attrs.get("data-blob").context(PageSnafu)?;
-        let collectors: CollectorsData = serde_json::from_str(body).context(SerializationSnafu)?;
+        let obj = serde_json::Value::from_str(&body).unwrap();
+        let body = serde_json::to_string_pretty(&obj).unwrap();
+        std::fs::write("result.json", &body).unwrap();
+        let collectors: CollectorsData = serde_json::from_str(&body).context(SerializationSnafu)?;
         let mut token = "".to_string();
         let mut done = false;
-        let conn = db.get().unwrap();
+        let conn = db.get().context(DbPoolSnafu)?;
         for collector in collectors.thumbs {
             done = add_collector_for_item(&conn, item_id, &collector)? || done;
             if let Some(current_token) = collector.token {
@@ -190,7 +198,7 @@ async fn get_next_page(
         let collectors: CollectorsResult =
             serde_json::from_str(&body).context(SerializationSnafu)?;
         let mut done = false;
-        let conn = db.get().unwrap();
+        let conn = db.get().context(DbPoolSnafu)?;
         for collector in collectors.results {
             done = add_collector_for_item(&conn, item_id, &collector)? || done;
             if let Some(current_token) = collector.token {
@@ -211,7 +219,7 @@ pub async fn fetch_track_collectors(
     db: &Pool<SqliteConnectionManager>,
     item_id: i64,
 ) -> Result<(), Error> {
-    let conn = db.get().unwrap();
+    let conn = db.get().context(DbPoolSnafu)?;
     if item_present_and_recent(&conn, item_id)? {
         return Ok(());
     }
@@ -227,24 +235,33 @@ pub async fn fetch_track_collectors(
 }
 
 const SELECT_FIRST_QUEUE_ITEM: &str = r#"
-select item_id from item_collected_by_queue limit 1"#;
+select item_id from item_collected_by_queue
+order by item_id asc
+limit 1"#;
 
-const DELETE_QUEUE_ITEM: &str = r#"
-delete from item_collected_by_queue where item_id = ?"#;
+const SELECT_UNFINISHED: &str = r#"
+select item_id from item
+where unixepoch('now') > unixepoch(last_updated, '30 days')
+order by item_id asc
+limit 1"#;
 
-fn get_next_item(db: &Connection) -> Result<Option<i64>, Error> {
-    let mut stmt = db
-        .prepare_cached(SELECT_FIRST_QUEUE_ITEM)
-        .context(DbPrepareSnafu)?;
+fn get_next_item(db: &Connection, crawl: bool) -> Result<Option<i64>, Error> {
+    let mut stmt = db.prepare_cached(SELECT_FIRST_QUEUE_ITEM).context(DbPrepareSnafu)?;
     let mut rows = stmt.query([]).context(DbReadSnafu)?;
     let row = rows.next().context(DbReadSnafu)?;
     if let Some(row) = row {
         let item_id: i64 = row.get("item_id").context(DbReadSnafu)?;
-        let mut stmt = db
-            .prepare_cached(DELETE_QUEUE_ITEM)
-            .context(DbPrepareSnafu)?;
-        stmt.execute([item_id]).context(DbWriteSnafu)?;
         Ok(Some(item_id))
+    } else if crawl {
+        let mut stmt = db.prepare_cached(SELECT_UNFINISHED).context(DbPrepareSnafu)?;
+        let mut rows = stmt.query([]).context(DbReadSnafu)?;
+        let row = rows.next().context(DbReadSnafu)?;
+        if let Some(row) = row {
+            let item_id: i64 = row.get("item_id").context(DbReadSnafu)?;
+            Ok(Some(item_id))
+        } else {
+            Ok(None)
+        }
     } else {
         Ok(None)
     }
@@ -261,39 +278,51 @@ fn mark_item_done(db: &Connection, item_id: i64) -> Result<(), Error> {
     Ok(())
 }
 
-const ADD_ITEM_TO_QUEUE: &str = r#"
-insert or ignore into item_collected_by_queue values (?)"#;
+const DELETE_QUEUE_ITEM: &str = r#"
+delete from item_collected_by_queue where item_id = ?"#;
 
-fn add_item_to_queue(db: &Connection, item_id: i64) -> Result<(), Error> {
-    let mut stmt = db
-        .prepare_cached(ADD_ITEM_TO_QUEUE)
-        .context(DbPrepareSnafu)?;
+fn remove_from_queue(db: &Connection, item_id: i64) -> Result<(), Error> {
+    let mut stmt = db.prepare_cached(DELETE_QUEUE_ITEM).context(DbPrepareSnafu)?;
     stmt.execute([item_id]).context(DbWriteSnafu)?;
     Ok(())
 }
 
-pub async fn item_worker(db: &Pool<SqliteConnectionManager>) -> Result<(), Error> {
+const DELETE_COLLECTED_BY: &str = r#"
+delete from collected_by where item_id = ?"#;
+
+fn remove_collected_by(db: &Connection, item_id: i64) -> Result<(), Error> {
+    let mut stmt = db.prepare_cached(DELETE_COLLECTED_BY).context(DbPrepareSnafu)?;
+    stmt.execute([item_id]).context(DbWriteSnafu)?;
+    Ok(())
+}
+
+pub async fn item_worker(db: &Pool<SqliteConnectionManager>, crawl: bool) -> Result<(), Error> {
     let mut timer = interval(Duration::from_secs(1));
     timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
-        if let Some(item_id) = get_next_item(&db.get().unwrap())? {
+        let conn = db.get().context(DbPoolSnafu)?;
+        if let Some(item_id) = get_next_item(&conn, crawl)? {
+            drop(conn);
             match fetch_track_collectors(db, item_id).await {
                 Err(Error::RateLimit) => {
                     println!("Rate limited, waiting 10 seconds");
-                    // Need to re-add item as it was removed from the queue by get_next_item
-                    add_item_to_queue(&db.get().unwrap(), item_id)?;
+                    let conn = db.get().context(DbPoolSnafu)?;
+                    remove_collected_by(&conn, item_id)?;
                     sleep(Duration::from_secs(10)).await
                 }
                 Err(Error::NotFoundError) => {
                     println!("Item with id {item_id} not found");
-                    mark_item_done(&db.get().unwrap(), item_id)?;
+                    let conn = db.get().context(DbPoolSnafu)?;
+                    mark_item_done(&conn, item_id)?;
+                    remove_from_queue(&conn, item_id)?;
                 }
                 Err(err) => {
-                    add_item_to_queue(&db.get().unwrap(), item_id)?;
                     println!("Error while processing item {item_id}: {err}");
                 }
                 Ok(()) => {
-                    mark_item_done(&db.get().unwrap(), item_id)?;
+                    let conn = db.get().context(DbPoolSnafu)?;
+                    mark_item_done(&conn, item_id)?;
+                    remove_from_queue(&conn, item_id)?;
                 }
             }
         }

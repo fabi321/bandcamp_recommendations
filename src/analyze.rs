@@ -51,8 +51,8 @@ pub fn get_user_recommendations(
     similar_boost: f64,
 ) -> Result<Vec<Item>, Error> {
     let conn = db.get().context(DbPoolSnafu)?;
-    let fan_id = crate::collectors::get_fan_id_for_username(&conn, username)?
-        .context(NotFoundSnafu)?;
+    let fan_id =
+        crate::collectors::get_fan_id_for_username(&conn, username)?.context(NotFoundSnafu)?;
     let users = get_relevant_users(&conn, username)?;
     let forbidden = users[&fan_id].clone();
     let mut count: HashMap<i64, f64> = HashMap::new();

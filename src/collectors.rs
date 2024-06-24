@@ -1,5 +1,8 @@
 use crate::types::{Collector, Item};
-use crate::{DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, DbWriteSnafu, Error, NetworkSnafu, PageSnafu, SerializationSnafu};
+use crate::{
+    DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, DbWriteSnafu, Error, NetworkSnafu, PageSnafu,
+    SerializationSnafu,
+};
 use fallible_iterator::FallibleIterator;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -258,14 +261,18 @@ order by fan_id asc
 limit 1"#;
 
 fn get_next_collector(db: &Connection, crawl: bool) -> Result<Option<String>, Error> {
-    let mut stmt = db.prepare_cached(SELECT_FIRST_QUEUE_COLLECTOR).context(DbPrepareSnafu)?;
+    let mut stmt = db
+        .prepare_cached(SELECT_FIRST_QUEUE_COLLECTOR)
+        .context(DbPrepareSnafu)?;
     let mut rows = stmt.query([]).context(DbReadSnafu)?;
     let row = rows.next().context(DbReadSnafu)?;
     if let Some(row) = row {
         let username: String = row.get("username").context(DbReadSnafu)?;
         Ok(Some(username))
     } else if crawl {
-        let mut stmt = db.prepare_cached(SELECT_UNFINISHED).context(DbPrepareSnafu)?;
+        let mut stmt = db
+            .prepare_cached(SELECT_UNFINISHED)
+            .context(DbPrepareSnafu)?;
         let mut rows = stmt.query([]).context(DbReadSnafu)?;
         let row = rows.next().context(DbReadSnafu)?;
         if let Some(row) = row {
@@ -298,12 +305,17 @@ select fan_id from collector where username = ?
 )"#;
 
 fn remove_from_queue(db: &Connection, collector: &str) -> Result<(), Error> {
-    let mut stmt = db.prepare_cached(DELETE_QUEUE_COLLECTOR).context(DbPrepareSnafu)?;
+    let mut stmt = db
+        .prepare_cached(DELETE_QUEUE_COLLECTOR)
+        .context(DbPrepareSnafu)?;
     stmt.execute([collector]).context(DbWriteSnafu)?;
     Ok(())
 }
 
-pub async fn collection_worker(db: &Pool<SqliteConnectionManager>, crawl: bool) -> Result<(), Error> {
+pub async fn collection_worker(
+    db: &Pool<SqliteConnectionManager>,
+    crawl: bool,
+) -> Result<(), Error> {
     let mut timer = interval(Duration::from_secs(1));
     timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {

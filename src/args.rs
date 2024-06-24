@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use clap::Parser;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 #[derive(Parser)]

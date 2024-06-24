@@ -1,7 +1,9 @@
-use std::str::FromStr;
 use crate::collectors::add_collector;
 use crate::types::{Collector, Item};
-use crate::{DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, DbResultSnafu, DbWriteSnafu, Error, NetworkSnafu, PageSnafu, SerializationSnafu};
+use crate::{
+    DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, DbResultSnafu, DbWriteSnafu, Error, NetworkSnafu,
+    PageSnafu, SerializationSnafu,
+};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use reqwest::{Client, StatusCode};
@@ -115,23 +117,24 @@ async fn get_initial_page(
     let db = db.clone();
     let result = spawn_blocking(move || {
         let soup = Soup::new(&body);
-        let node = soup
-            .attr("id", "collectors-data")
-            .find();
+        let node = soup.attr("id", "collectors-data").find();
         let Some(node) = node else {
-            return Err(if soup.attr("id", "subscription-collectors-data").find().is_some() {
-                // I have no clue how to properly scrape subscriptions, so just ignore them
-                Error::NotFoundError
-            } else {
-                Error::PageError
-            });
+            return Err(
+                if soup
+                    .attr("id", "subscription-collectors-data")
+                    .find()
+                    .is_some()
+                {
+                    // I have no clue how to properly scrape subscriptions, so just ignore them
+                    Error::NotFoundError
+                } else {
+                    Error::PageError
+                },
+            );
         };
         let attrs = node.attrs();
         let body = attrs.get("data-blob").context(PageSnafu)?;
-        let obj = serde_json::Value::from_str(&body).unwrap();
-        let body = serde_json::to_string_pretty(&obj).unwrap();
-        std::fs::write("result.json", &body).unwrap();
-        let collectors: CollectorsData = serde_json::from_str(&body).context(SerializationSnafu)?;
+        let collectors: CollectorsData = serde_json::from_str(body).context(SerializationSnafu)?;
         let mut token = "".to_string();
         let mut done = false;
         let conn = db.get().context(DbPoolSnafu)?;
@@ -246,14 +249,18 @@ order by item_id asc
 limit 1"#;
 
 fn get_next_item(db: &Connection, crawl: bool) -> Result<Option<i64>, Error> {
-    let mut stmt = db.prepare_cached(SELECT_FIRST_QUEUE_ITEM).context(DbPrepareSnafu)?;
+    let mut stmt = db
+        .prepare_cached(SELECT_FIRST_QUEUE_ITEM)
+        .context(DbPrepareSnafu)?;
     let mut rows = stmt.query([]).context(DbReadSnafu)?;
     let row = rows.next().context(DbReadSnafu)?;
     if let Some(row) = row {
         let item_id: i64 = row.get("item_id").context(DbReadSnafu)?;
         Ok(Some(item_id))
     } else if crawl {
-        let mut stmt = db.prepare_cached(SELECT_UNFINISHED).context(DbPrepareSnafu)?;
+        let mut stmt = db
+            .prepare_cached(SELECT_UNFINISHED)
+            .context(DbPrepareSnafu)?;
         let mut rows = stmt.query([]).context(DbReadSnafu)?;
         let row = rows.next().context(DbReadSnafu)?;
         if let Some(row) = row {
@@ -282,7 +289,9 @@ const DELETE_QUEUE_ITEM: &str = r#"
 delete from item_collected_by_queue where item_id = ?"#;
 
 fn remove_from_queue(db: &Connection, item_id: i64) -> Result<(), Error> {
-    let mut stmt = db.prepare_cached(DELETE_QUEUE_ITEM).context(DbPrepareSnafu)?;
+    let mut stmt = db
+        .prepare_cached(DELETE_QUEUE_ITEM)
+        .context(DbPrepareSnafu)?;
     stmt.execute([item_id]).context(DbWriteSnafu)?;
     Ok(())
 }
@@ -291,7 +300,9 @@ const DELETE_COLLECTED_BY: &str = r#"
 delete from collected_by where item_id = ?"#;
 
 fn remove_collected_by(db: &Connection, item_id: i64) -> Result<(), Error> {
-    let mut stmt = db.prepare_cached(DELETE_COLLECTED_BY).context(DbPrepareSnafu)?;
+    let mut stmt = db
+        .prepare_cached(DELETE_COLLECTED_BY)
+        .context(DbPrepareSnafu)?;
     stmt.execute([item_id]).context(DbWriteSnafu)?;
     Ok(())
 }

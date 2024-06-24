@@ -1,5 +1,5 @@
-use actix_web::{get, web, App, HttpResponse, HttpServer};
 use actix_web::http::header::ContentType;
+use actix_web::{get, web, App, HttpResponse, HttpServer};
 use clap::Parser;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -126,7 +126,9 @@ async fn main() -> std::io::Result<()> {
     let db_copy = pool.clone();
     let collection_worker = spawn(async move {
         loop {
-            let res = collectors::collection_worker(&db_copy, args.crawl).await.unwrap_err();
+            let res = collectors::collection_worker(&db_copy, args.crawl)
+                .await
+                .unwrap_err();
             println!("Error in collection_worker: {res}");
         }
     });
@@ -157,8 +159,8 @@ async fn main() -> std::io::Result<()> {
             .service(get_index)
             .service(get_root)
     })
-        .bind(args.address)?
-        .run();
+    .bind(args.address)?
+    .run();
     let res = join!(collection_worker, item_worker, progress_manager, server);
     res.0.unwrap();
     res.1.unwrap();
@@ -189,7 +191,7 @@ pub enum Error {
 
     #[snafu(display("Database write error: {:?}", source))]
     DbWriteError { source: rusqlite::Error },
-    
+
     #[snafu(display("Error opening database: {:?}", source))]
     DbPoolError { source: r2d2::Error },
 

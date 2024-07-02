@@ -25,7 +25,7 @@ struct CollectionResult {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct CollectionData {
-    pub last_token: String,
+    pub last_token: Option<String>,
     pub item_count: i64,
     pub batch_size: i64,
 }
@@ -117,9 +117,8 @@ fn add_item_for_collector(db: &Connection, fan_id: i64, item: &Item) -> Result<b
 }
 
 struct InitialPage {
-    more_available: bool,
     fan_id: i64,
-    last_token: String,
+    last_token: Option<String>,
 }
 
 async fn get_initial_page(
@@ -153,11 +152,10 @@ async fn get_initial_page(
         for entry in result.item_cache.collection.into_values() {
             done = add_item_for_collector(&conn, result.fan_data.fan_id, &entry)?;
         }
+        let more_available = !done && result.collection_data.item_count > result.collection_data.batch_size;
         Ok(InitialPage {
-            more_available: !done
-                && result.collection_data.item_count > result.collection_data.batch_size,
             fan_id: result.fan_data.fan_id,
-            last_token: result.collection_data.last_token,
+            last_token: if more_available { result.collection_data.last_token } else { None },
         })
     })
     .await
@@ -218,8 +216,7 @@ pub async fn fetch_collection(
     }
     drop(conn);
     let result = get_initial_page(db, name).await?;
-    if result.more_available {
-        let mut last_token = result.last_token;
+    if let Some(mut last_token) = result.last_token {
         println!("Reading next page for {name}");
         while let Some(token) = get_next_page(db, result.fan_id, last_token).await? {
             println!("Reading next page for {name}");

@@ -1,6 +1,6 @@
 [package]
 name = "bandcamp_recommendations"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 license = "AGPL-3.0-only"
 readme = "README.md"
@@ -22,3 +22,5 @@ clap = { version = "4", features = ["derive"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 mime = "0.3"
+regex = "1"
+lazy_static = "1"

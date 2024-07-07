@@ -13,6 +13,8 @@ use serde_json::json;
 use snafu::{OptionExt, ResultExt};
 use soup::{NodeExt, QueryBuilderExt, Soup};
 use std::time::Duration;
+use lazy_static::lazy_static;
+use regex::Regex;
 use tokio::task::spawn_blocking;
 use tokio::time::{interval, sleep, MissedTickBehavior};
 
@@ -95,11 +97,19 @@ struct PageResults {
     album_type: String,
 }
 
+lazy_static!(
+    static ref BANDCAMP_REGEX: Regex =  Regex::new("^https?://[a-z]+\\.bandcamp\\.com").unwrap();
+);
+
 async fn get_initial_page(
     db: &Pool<SqliteConnectionManager>,
     item: &Item,
 ) -> Result<Option<PageResults>, Error> {
     println!("Fetching collectors for {}", item.item_title);
+    // Not a bandcamp url
+    if !BANDCAMP_REGEX.is_match(&item.item_url) {
+        return Err(Error::NotFoundError)
+    }
     let client = Client::new();
     let page = client
         .get(&item.item_url)

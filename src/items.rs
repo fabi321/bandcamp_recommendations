@@ -98,7 +98,7 @@ struct PageResults {
 }
 
 lazy_static!(
-    static ref BANDCAMP_REGEX: Regex =  Regex::new("^https?://[a-z]+\\.bandcamp\\.com").unwrap();
+    static ref BANDCAMP_REGEX: Regex =  Regex::new("^https?://[a-z0-9-]+\\.bandcamp\\.com").unwrap();
 );
 
 async fn get_initial_page(

@@ -329,7 +329,7 @@ pub async fn collection_worker(
     db: &Pool<SqliteConnectionManager>,
     crawl: bool,
 ) -> Result<(), Error> {
-    let mut timer = interval(Duration::from_secs(1));
+    let mut timer = interval(Duration::from_secs(3));
     timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
         let conn = db.get().context(DbPoolSnafu)?;

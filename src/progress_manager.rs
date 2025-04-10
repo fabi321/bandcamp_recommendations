@@ -8,8 +8,8 @@ use snafu::ResultExt;
 use std::time::Duration;
 use tokio::time::{interval, MissedTickBehavior};
 
-const STAGE_1_PER_ITEM: usize = 2;
-const STAGE_2_PER_ITEM: usize = 3;
+const STAGE_1_PER_ITEM: usize = 3; // seconds per item
+const STAGE_2_PER_ITEM: usize = 5; // seconds per collector
 
 fn get_ids(fan_id: i64, stmt: &mut CachedStatement) -> Result<Vec<i64>, Error> {
     let results = stmt

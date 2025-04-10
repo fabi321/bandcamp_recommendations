@@ -24,4 +24,4 @@ r2d2_sqlite = "0.24"
 mime = "0.3"
 regex = "1"
 lazy_static = "1"
-ctrlc = "3"
+ctrlc = { version = "3", features = ["termination"] }

@@ -1,7 +1,7 @@
 [package]
 name = "bandcamp_recommendations"
 version = "0.2.5"
-edition = "2021"
+edition = "2024"
 license = "AGPL-3.0-only"
 readme = "README.md"
 repository = "https://github.com/fabi321/bandcamp_recommendations"
@@ -24,3 +24,4 @@ r2d2_sqlite = "0.24"
 mime = "0.3"
 regex = "1"
 lazy_static = "1"
+ctrlc = "3"

@@ -5,6 +5,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{CachedStatement, Connection};
 use snafu::ResultExt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::time::{interval, MissedTickBehavior};
 
@@ -200,10 +201,13 @@ fn get_targets(db: &Connection) -> Result<Vec<i64>, Error> {
     Ok(result)
 }
 
-pub async fn progress_manager(db: &Pool<SqliteConnectionManager>) -> Result<(), Error> {
+pub async fn progress_manager(
+    db: &Pool<SqliteConnectionManager>,
+    run_state: &AtomicBool,
+) -> Result<(), Error> {
     let mut timer = interval(Duration::from_secs(1));
     timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    loop {
+    while run_state.load(Ordering::Relaxed) {
         let conn = db.get().context(DbPoolSnafu)?;
         for target in get_targets(&conn)? {
             update_target(&conn, target)?
@@ -211,4 +215,5 @@ pub async fn progress_manager(db: &Pool<SqliteConnectionManager>) -> Result<(), 
         drop(conn);
         timer.tick().await;
     }
+    Ok(())
 }

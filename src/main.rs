@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use actix_web::http::header::ContentType;
 use actix_web::{App, HttpResponse, HttpServer, get, web};
 use clap::Parser;
@@ -21,6 +23,8 @@ type DataType = web::Data<Pool<SqliteConnectionManager>>;
 struct UserInfo {
     username: String,
 }
+
+static RUN_STATE: AtomicBool = AtomicBool::new(true);
 
 #[get("/api/get_status")]
 async fn get_status(query: web::Query<UserInfo>, data: DataType) -> HttpResponse {
@@ -125,26 +129,19 @@ async fn main() -> std::io::Result<()> {
         .expect("Unable to initialize database");
     let db_copy = pool.clone();
     let collection_worker = spawn(async move {
-        loop {
-            let res = collectors::collection_worker(&db_copy, args.crawl)
-                .await
-                .unwrap_err();
+        while let Err(res) = collectors::collection_worker(&db_copy, args.crawl, &RUN_STATE).await {
             println!("Error in collection_worker: {res}");
         }
     });
     let db_copy = pool.clone();
     let item_worker = spawn(async move {
-        loop {
-            let res = items::item_worker(&db_copy, args.crawl).await.unwrap_err();
+        while let Err(res) = items::item_worker(&db_copy, args.crawl, &RUN_STATE).await {
             println!("Error in item_worker: {res}");
         }
     });
     let db_copy = pool.clone();
     let progress_manager = spawn(async move {
-        loop {
-            let res = progress_manager::progress_manager(&db_copy)
-                .await
-                .unwrap_err();
+        while let Err(res) = progress_manager::progress_manager(&db_copy, &RUN_STATE).await {
             println!("Error in progress_manager: {res}");
         }
     });
@@ -161,11 +158,18 @@ async fn main() -> std::io::Result<()> {
     })
     .bind(args.address)?
     .run();
-    let res = join!(collection_worker, item_worker, progress_manager, server);
-    res.0.unwrap();
-    res.1.unwrap();
-    res.2.unwrap();
-    res.3.unwrap();
+    let handle = server.handle();
+    ctrlc::set_handler(move || {
+        drop(handle.stop(true)); // stop is initiated anyways
+        RUN_STATE.store(false, Ordering::Relaxed);
+    })
+    .expect("Unable to set interrrupt handler");
+    let (collection_res, item_res, progress_res, server_res) =
+        join!(collection_worker, item_worker, progress_manager, server);
+    collection_res.unwrap();
+    item_res.unwrap();
+    progress_res.unwrap();
+    server_res.unwrap();
     Ok(())
 }
 

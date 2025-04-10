@@ -13,6 +13,7 @@ use serde_json::json;
 use snafu::{OptionExt, ResultExt};
 use soup::{NodeExt, QueryBuilderExt, Soup};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::task::spawn_blocking;
 use tokio::time::{interval, sleep, MissedTickBehavior};
@@ -328,10 +329,11 @@ fn remove_collects(db: &Connection, name: &str) -> Result<(), Error> {
 pub async fn collection_worker(
     db: &Pool<SqliteConnectionManager>,
     crawl: bool,
+    run_state: &AtomicBool,
 ) -> Result<(), Error> {
     let mut timer = interval(Duration::from_secs(3));
     timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    loop {
+    while run_state.load(Ordering::Relaxed) {
         let conn = db.get().context(DbPoolSnafu)?;
         if let Some(collector) = get_next_collector(&conn, crawl)? {
             drop(conn);
@@ -360,6 +362,7 @@ pub async fn collection_worker(
         }
         timer.tick().await;
     }
+    Ok(())
 }
 
 const SELECT_FAN_ID_FOR_NAME: &str = r#"

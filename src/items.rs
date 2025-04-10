@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use snafu::{OptionExt, ResultExt};
 use soup::{NodeExt, QueryBuilderExt, Soup};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::task::spawn_blocking;
 use tokio::time::{interval, sleep, MissedTickBehavior};
@@ -317,10 +318,14 @@ fn remove_collected_by(db: &Connection, item_id: i64) -> Result<(), Error> {
     Ok(())
 }
 
-pub async fn item_worker(db: &Pool<SqliteConnectionManager>, crawl: bool) -> Result<(), Error> {
-    let mut timer = interval(Duration::from_secs(1));
+pub async fn item_worker(
+    db: &Pool<SqliteConnectionManager>,
+    crawl: bool,
+    run_state: &AtomicBool,
+) -> Result<(), Error> {
+    let mut timer = interval(Duration::from_secs(3));
     timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    loop {
+    while run_state.load(Ordering::Relaxed) {
         let conn = db.get().context(DbPoolSnafu)?;
         if let Some(item_id) = get_next_item(&conn, crawl)? {
             drop(conn);
@@ -349,4 +354,5 @@ pub async fn item_worker(db: &Pool<SqliteConnectionManager>, crawl: bool) -> Res
         }
         timer.tick().await;
     }
+    Ok(())
 }

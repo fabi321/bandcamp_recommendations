@@ -4,8 +4,10 @@ use crate::{
     DbPoolSnafu, DbPrepareSnafu, DbReadSnafu, DbResultSnafu, DbWriteSnafu, Error, NetworkSnafu,
     PageSnafu, SerializationSnafu,
 };
+use lazy_static::lazy_static;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use regex::Regex;
 use reqwest::{Client, StatusCode};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -13,8 +15,6 @@ use serde_json::json;
 use snafu::{OptionExt, ResultExt};
 use soup::{NodeExt, QueryBuilderExt, Soup};
 use std::time::Duration;
-use lazy_static::lazy_static;
-use regex::Regex;
 use tokio::task::spawn_blocking;
 use tokio::time::{interval, sleep, MissedTickBehavior};
 
@@ -97,9 +97,9 @@ struct PageResults {
     album_type: String,
 }
 
-lazy_static!(
-    static ref BANDCAMP_REGEX: Regex =  Regex::new("^https?://[a-z0-9-]+\\.bandcamp\\.com").unwrap();
-);
+lazy_static! {
+    static ref BANDCAMP_REGEX: Regex = Regex::new("^https?://[a-z0-9-]+\\.bandcamp\\.com").unwrap();
+}
 
 async fn get_initial_page(
     db: &Pool<SqliteConnectionManager>,
@@ -108,7 +108,7 @@ async fn get_initial_page(
     println!("Fetching collectors for {}", item.item_title);
     // Not a bandcamp url
     if !BANDCAMP_REGEX.is_match(&item.item_url) {
-        return Err(Error::NotFoundError)
+        return Err(Error::NotFoundError);
     }
     let client = Client::new();
     let page = client

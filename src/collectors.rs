@@ -152,10 +152,15 @@ async fn get_initial_page(
         for entry in result.item_cache.collection.into_values() {
             done = add_item_for_collector(&conn, result.fan_data.fan_id, &entry)?;
         }
-        let more_available = !done && result.collection_data.item_count > result.collection_data.batch_size;
+        let more_available =
+            !done && result.collection_data.item_count > result.collection_data.batch_size;
         Ok(InitialPage {
             fan_id: result.fan_data.fan_id,
-            last_token: if more_available { result.collection_data.last_token } else { None },
+            last_token: if more_available {
+                result.collection_data.last_token
+            } else {
+                None
+            },
         })
     })
     .await

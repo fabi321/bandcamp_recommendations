@@ -1,5 +1,5 @@
 use actix_web::http::header::ContentType;
-use actix_web::{get, web, App, HttpResponse, HttpServer};
+use actix_web::{App, HttpResponse, HttpServer, get, web};
 use clap::Parser;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -27,7 +27,7 @@ async fn get_status(query: web::Query<UserInfo>, data: DataType) -> HttpResponse
     let conn = data.get().unwrap();
     let fan_id = match collectors::get_fan_id_for_username(&conn, &query.username) {
         Ok(Some(fan_id)) => fan_id,
-        Ok(None) => {
+        Ok(Option::None) => {
             return HttpResponse::NotFound().body("User not found");
         }
         Err(err) => {
@@ -77,7 +77,7 @@ async fn get_recommendations(
     query: web::Query<RecommendationInfo>,
     data: DataType,
 ) -> HttpResponse {
-    let similar_boost = query.similar_boost.unwrap_or(2.0).min(5.0).max(1.0);
+    let similar_boost = query.similar_boost.unwrap_or(2.0).clamp(1.0, 5.0);
     let result = spawn_blocking(move || {
         analyze::get_user_recommendations(data.get_ref(), &query.username, similar_boost)
     })

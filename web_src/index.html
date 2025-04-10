@@ -1,216 +1,284 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Bandcamp Recommendations</title>
-    <link rel="stylesheet" href="/classless.css">
-    <style>
-        .slider-container {
-            position: relative;
-            width: 100%;
-        }
-        .slider-labels {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 5px;
-        }
-    </style>
-</head>
-<body>
-<h1>Bandcamp Recommendations</h1>
-<label>
-    Bandcamp Username
-    <input id="username" type="text">
-</label>
-<label for="similar_boost">
-    How personalized should the results be?
-</label>
-<div class="slider-container">
-    <input id="similar_boost" type="range" min="0" max="100" value="50">
-    <div class="slider-labels">
-        <span>Popular Results</span>
-        <span>Personalized Results</span>
-    </div>
-</div>
-<button type="button" id="submit">Search for user</button>
-<p></p>
-<div id="progress" class="hidden">
-    <label id="progress_bar_description" for="progress_bar">
-        Download progress
-    </label>
-    <progress id="progress_bar"></progress><br>
-    <span>Feel free to leave the page and come back later</span>
-</div>
-<div id="error" class="hidden">
-    <p id="error_code">Error fetching user</p>
-</div>
-<div id="result" class="hidden">
-    <h5>Recommendations</h5>
-    <table>
-        <thead>
-            <tr>
-                <th scope="col">Album</th>
-                <th scope="col">Band</th>
-                <th scope="col">Collected By</th>
-                <th scope="col">Score</th>
-            </tr>
-        </thead>
-        <tbody id="result_body">
-        </tbody>
-    </table>
-</div>
-<template id="result_row">
-    <tr>
-        <td><a id="result_album" href="#"></a></td>
-        <td id="result_band"></td>
-        <td id="result_collected"></td>
-        <td id="result_score"></td>
-    </tr>
-</template>
-<script>
-    // will be overwritten by prefers-color-scheme
-    document.documentElement.setAttribute('data-theme', 'light')
-    let users = {};
-    let page = 0;
-
-    function readableDuration(seconds) {
-        let interval = Math.floor(seconds / 31536000);
-
-        if (interval > 1) {
-            return interval + " years";
-        }
-        interval = Math.floor(seconds / 2592000);
-        if (interval > 1) {
-            return interval + " months";
-        }
-        interval = Math.floor(seconds / 86400);
-        if (interval > 1) {
-            return interval + " days";
-        }
-        interval = Math.floor(seconds / 3600);
-        if (interval > 1) {
-            return interval + " hours";
-        }
-        interval = Math.floor(seconds / 60);
-        if (interval > 1) {
-            return interval + " minutes";
-        }
-        return Math.floor(seconds) + " seconds";
-    }
-
-    function hideAll() {
-        document.getElementById("progress").classList.toggle("hidden", true);
-        document.getElementById("error").classList.toggle("hidden", true);
-        document.getElementById("result").classList.toggle("hidden", true);
-    }
-
-    function linToLog(position) {
-        let minv = Math.log(1);
-        let maxv = Math.log(5);
-
-        // calculate adjustment factor
-        let scale = (maxv-minv) / 100;
-
-        return Math.exp(minv + scale*(position));
-    }
-
-    function getRecommendations(username) {
-        let similar_boost = linToLog(document.getElementById("similar_boost").value);
-        fetch('/api/get_recommendations?username=' + encodeURIComponent(username) + '&similar_boost=' + similar_boost).then((result) => {
-            if (result.ok) {
-                result.json().then((body) => {
-                    hideAll();
-                    let table_body = document.getElementById("result_body");
-                    let template = document.getElementById("result_row");
-                    let new_nodes = [];
-                    for (let value of body) {
-                        let clone = template.content.cloneNode(true);
-                        let album = clone.getElementById("result_album");
-                        album.textContent = value.item_title;
-                        album.setAttribute("href", value.item_url);
-                        clone.getElementById("result_band").innerText = value.band_name;
-                        clone.getElementById("result_collected").innerText = value.also_collected_count;
-                        clone.getElementById("result_score").innerText = Math.floor(value.score);
-                        new_nodes.push(clone)
-                    }
-                    table_body.replaceChildren(...new_nodes);
-                    document.getElementById("result").classList.toggle("hidden");
-                })
-            } else {
-                result.text().then((body) => {
-                    hideAll();
-                    document.getElementById("error_code").innerText = body;
-                    document.getElementById("error").classList.toggle("hidden");
-                })
+    <head>
+        <meta charset="UTF-8" />
+        <title>Bandcamp Recommendations</title>
+        <link rel="stylesheet" href="/classless.css" />
+        <style>
+            .slider-container {
+                position: relative;
+                width: 100%;
             }
-        })
-    }
+            .slider-labels {
+                display: flex;
+                justify-content: space-between;
+                margin-top: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Bandcamp Recommendations</h1>
+        <label>
+            Bandcamp Username
+            <input id="username" type="text" />
+        </label>
+        <label for="similar_boost">
+            How personalized should the results be?
+        </label>
+        <div class="slider-container">
+            <input
+                id="similar_boost"
+                type="range"
+                min="0"
+                max="100"
+                value="50"
+            />
+            <div class="slider-labels">
+                <span>Popular Results</span>
+                <span>Personalized Results</span>
+            </div>
+        </div>
+        <button type="button" id="submit">Search for user</button>
+        <p></p>
+        <div id="progress" class="hidden">
+            <label id="progress_bar_description" for="progress_bar">
+                Download progress
+            </label>
+            <progress id="progress_bar"></progress><br />
+            <span>Feel free to leave the page and come back later</span>
+        </div>
+        <div id="error" class="hidden">
+            <p id="error_code">Error fetching user</p>
+        </div>
+        <div id="result" class="hidden">
+            <h5>Recommendations</h5>
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Album</th>
+                        <th scope="col">Band</th>
+                        <th scope="col">Collected By</th>
+                        <th scope="col">Score</th>
+                    </tr>
+                </thead>
+                <tbody id="result_body"></tbody>
+            </table>
+        </div>
+        <template id="result_row">
+            <tr>
+                <td><a id="result_album" href="#"></a></td>
+                <td id="result_band"></td>
+                <td id="result_collected"></td>
+                <td id="result_score"></td>
+            </tr>
+        </template>
+        <script>
+            // will be overwritten by prefers-color-scheme
+            document.documentElement.setAttribute("data-theme", "light");
+            let users = {};
+            let page = 0;
 
-    function getStatus(username) {
-        if (username !== document.getElementById("username").value) {
-            // In case the user edits the username, cancels all recurring requests
-            return
-        }
-        if (users[username] !== "done") {
-            fetch('/api/get_status?username=' + encodeURIComponent(username)).then((result) => {
-                if (result.ok) {
-                    result.json().then((body) => {
-                        if (body.stage === 3) {
-                            users[username] = 'done';
-                            getRecommendations(username);
-                        } else {
+            function readableDuration(seconds) {
+                let interval = Math.floor(seconds / 31536000);
+
+                if (interval > 1) {
+                    return interval + " years";
+                }
+                interval = Math.floor(seconds / 2592000);
+                if (interval > 1) {
+                    return interval + " months";
+                }
+                interval = Math.floor(seconds / 86400);
+                if (interval > 1) {
+                    return interval + " days";
+                }
+                interval = Math.floor(seconds / 3600);
+                if (interval > 1) {
+                    return interval + " hours";
+                }
+                interval = Math.floor(seconds / 60);
+                if (interval > 1) {
+                    return interval + " minutes";
+                }
+                return Math.floor(seconds) + " seconds";
+            }
+
+            function hideAll() {
+                document
+                    .getElementById("progress")
+                    .classList.toggle("hidden", true);
+                document
+                    .getElementById("error")
+                    .classList.toggle("hidden", true);
+                document
+                    .getElementById("result")
+                    .classList.toggle("hidden", true);
+            }
+
+            function linToLog(position) {
+                let minv = Math.log(1);
+                let maxv = Math.log(5);
+
+                // calculate adjustment factor
+                let scale = (maxv - minv) / 100;
+
+                return Math.exp(minv + scale * position);
+            }
+
+            function getRecommendations(username) {
+                let similar_boost = linToLog(
+                    document.getElementById("similar_boost").value,
+                );
+                fetch(
+                    "/api/get_recommendations?username=" +
+                        encodeURIComponent(username) +
+                        "&similar_boost=" +
+                        similar_boost,
+                ).then((result) => {
+                    if (result.ok) {
+                        result.json().then((body) => {
                             hideAll();
-                            const item = body.stage === 1 ? 'item' : 'collector';
-                            const bar = document.getElementById("progress_bar");
-                            bar.setAttribute("max", body.count_total);
-                            bar.setAttribute("value", body.count_total - body.count_left);
-                            bar.innerText = body.count_left + ' of ' + body.count_total + ' ' + item + 's left';
-                            document.getElementById("progress_bar_description").innerText = 'Stage ' + body.stage + ' of 2, ' + bar.innerText + '. ETA: ' + readableDuration(body.eta);
-                            document.getElementById("progress").classList.toggle("hidden")
-                            setTimeout(() => {
-                                getStatus(username)
-                            }, 10_000)
-                        }
-                    })
-                } else {
-                    result.text().then((body) => {
-                        hideAll();
-                        document.getElementById("error_code").innerText = body;
-                        document.getElementById("error").classList.toggle("hidden");
-                    })
-                }
-            })
-        } else {
-            getRecommendations(username)
-        }
-    }
+                            let table_body =
+                                document.getElementById("result_body");
+                            let template =
+                                document.getElementById("result_row");
+                            let new_nodes = [];
+                            for (let value of body) {
+                                let clone = template.content.cloneNode(true);
+                                let album =
+                                    clone.getElementById("result_album");
+                                album.textContent = value.item_title;
+                                album.setAttribute("href", value.item_url);
+                                clone.getElementById("result_band").innerText =
+                                    value.band_name;
+                                clone.getElementById(
+                                    "result_collected",
+                                ).innerText = value.also_collected_count;
+                                clone.getElementById("result_score").innerText =
+                                    Math.floor(value.score);
+                                new_nodes.push(clone);
+                            }
+                            table_body.replaceChildren(...new_nodes);
+                            document
+                                .getElementById("result")
+                                .classList.toggle("hidden");
+                        });
+                    } else {
+                        result.text().then((body) => {
+                            hideAll();
+                            document.getElementById("error_code").innerText =
+                                body;
+                            document
+                                .getElementById("error")
+                                .classList.toggle("hidden");
+                        });
+                    }
+                });
+            }
 
-    function getUser() {
-        let username = document.getElementById("username").value;
-        if (!users[username]) {
-            fetch('/api/get_user?username=' + encodeURIComponent(username)).then((result) => {
-                if (result.ok) {
-                    users[username] = 'true';
-                    getStatus(username)
-                } else {
-                    result.text().then((body) => {
-                        hideAll();
-                        document.getElementById("error_code").innerText = body;
-                        document.getElementById("error").classList.toggle("hidden");
-                    })
+            function getStatus(username) {
+                if (username !== document.getElementById("username").value) {
+                    // In case the user edits the username, cancels all recurring requests
+                    return;
                 }
-            })
-        }
-        getStatus(username)
-    }
-    document.getElementById("submit").onclick = getUser;
-    document.getElementById("username").onkeydown = (ev) => {
-        let keyCode = ev.code || ev.key;
-        if (keyCode === 'Enter') {
-            getUser();
-            return false;
-        }
-    }
-</script>
-</body>
+                if (users[username] !== "done") {
+                    fetch(
+                        "/api/get_status?username=" +
+                            encodeURIComponent(username),
+                    ).then((result) => {
+                        if (result.ok) {
+                            result.json().then((body) => {
+                                if (body.stage === 3) {
+                                    users[username] = "done";
+                                    getRecommendations(username);
+                                } else {
+                                    hideAll();
+                                    const item =
+                                        body.stage === 1 ? "item" : "collector";
+                                    const bar =
+                                        document.getElementById("progress_bar");
+                                    bar.setAttribute("max", body.count_total);
+                                    bar.setAttribute(
+                                        "value",
+                                        body.count_total - body.count_left,
+                                    );
+                                    bar.innerText =
+                                        body.count_left +
+                                        " of " +
+                                        body.count_total +
+                                        " " +
+                                        item +
+                                        "s left";
+                                    document.getElementById(
+                                        "progress_bar_description",
+                                    ).innerText =
+                                        "Stage " +
+                                        body.stage +
+                                        " of 2, " +
+                                        bar.innerText +
+                                        ". ETA: " +
+                                        readableDuration(body.eta);
+                                    document
+                                        .getElementById("progress")
+                                        .classList.toggle("hidden");
+                                    setTimeout(() => {
+                                        getStatus(username);
+                                    }, 3_000);
+                                }
+                            });
+                        } else {
+                            result.text().then((body) => {
+                                hideAll();
+                                document.getElementById(
+                                    "error_code",
+                                ).innerText = body;
+                                document
+                                    .getElementById("error")
+                                    .classList.toggle("hidden");
+                            });
+                            setTimeout(() => {
+                                getStatus(username);
+                            }, 3_000);
+                        }
+                    });
+                } else {
+                    getRecommendations(username);
+                }
+            }
+
+            function getUser() {
+                let username = document.getElementById("username").value;
+                if (!users[username]) {
+                    fetch(
+                        "/api/get_user?username=" +
+                            encodeURIComponent(username),
+                    ).then((result) => {
+                        if (result.ok) {
+                            users[username] = "true";
+                            getStatus(username);
+                        } else {
+                            result.text().then((body) => {
+                                hideAll();
+                                document.getElementById(
+                                    "error_code",
+                                ).innerText = body;
+                                document
+                                    .getElementById("error")
+                                    .classList.toggle("hidden");
+                            });
+                        }
+                    });
+                }
+                getStatus(username);
+            }
+            document.getElementById("submit").onclick = getUser;
+            document.getElementById("username").onkeydown = (ev) => {
+                let keyCode = ev.code || ev.key;
+                if (keyCode === "Enter") {
+                    getUser();
+                    return false;
+                }
+            };
+        </script>
+    </body>
 </html>
